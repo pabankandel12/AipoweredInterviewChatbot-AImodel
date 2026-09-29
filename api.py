@@ -9,10 +9,20 @@ from ai_model.questions import evaluate_answer
 
 app = FastAPI()
 
-# ✅ CORS FIX (DEV SAFE)
+# The frontend origins are configured in .env locally and as CORS_ORIGINS in
+# Render's environment settings. Separate multiple origins with commas.
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # change to specific origins in production
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
