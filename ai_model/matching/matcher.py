@@ -2,15 +2,27 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-def calculate_match(cv: str, jd: str) -> float:
-    """TF-IDF cosine similarity between a CV and a job description.
-
-    Returns a score between 0.0 and 1.0.
-    """
+def calculate_match_details(cv: str, jd: str) -> dict:
+    """Calculate TF-IDF cosine similarity and return its shared-term evidence."""
     if not cv.strip() or not jd.strip():
-        return 0.0
+        return {"score": 0.0, "shared_terms": []}
 
-    vectorizer = TfidfVectorizer()
+    vectorizer = TfidfVectorizer(ngram_range=(1, 2))
     vectors = vectorizer.fit_transform([cv, jd])
-    similarity = cosine_similarity(vectors[0:1], vectors[1:2])
-    return round(float(similarity[0][0]), 2)
+    similarity = float(cosine_similarity(vectors[0:1], vectors[1:2])[0][0])
+
+    feature_names = vectorizer.get_feature_names_out()
+    term_weights = vectors[0].multiply(vectors[1]).toarray()[0]
+    top_indexes = term_weights.argsort()[::-1]
+    shared_terms = [
+        feature_names[index]
+        for index in top_indexes
+        if term_weights[index] > 0
+    ][:8]
+
+    return {"score": round(similarity, 2), "shared_terms": shared_terms}
+
+
+def calculate_match(cv: str, jd: str) -> float:
+    """Backward-compatible TF-IDF cosine similarity score between 0 and 1."""
+    return calculate_match_details(cv, jd)["score"]
