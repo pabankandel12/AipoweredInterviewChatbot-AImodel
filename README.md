@@ -63,6 +63,41 @@ print(result)
 # {'name': 'PABAN KANDEL', 'skills': [...], 'match_score': 0.34, 'questions': [...]}
 ```
 
+## Deploying the API to Render
+
+Create a Render **Web Service** for the directory containing `api.py` (in
+this checkout, `project final/interview_chatbot`) and use:
+
+| Setting | Value |
+|---|---|
+| Root Directory | Directory containing `api.py` |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `uvicorn api:app --host 0.0.0.0 --port $PORT` |
+
+Set these environment variables in Render:
+
+- `GEMINI_API_KEY`: your Gemini API key. Without it, question generation and answer evaluation use the built-in offline fallbacks.
+- `GEMINI_MODEL`: optional; defaults to `gemini-2.5-flash`.
+- `CORS_ORIGINS`: comma-separated frontend origins if the browser calls this API directly.
+
+If the Express backend is a separate Render service, set its `FASTAPI_URL` to
+this AI service's base URL (for example, `https://your-ai-service.onrender.com`,
+without a trailing slash).
+
+Check `https://<your-service>.onrender.com/health` after deployment. Its
+`gemini_configured` field confirms whether the service received a Gemini key;
+it does not make a test request to Gemini. If the key is present but Gemini is
+failing, check the service logs for `[question_generator]` or `[evaluator]`
+messages and verify the key and Gemini API quota.
+
+Render's free web services can sleep when idle. The first request after a
+service sleeps has to wait for a cold start; this project allows up to 90
+seconds for the backend to receive a response from the AI service and runs
+long synchronous model work outside FastAPI's event loop so health checks can
+still respond. The free plan cannot be configured to stay awake continuously.
+If the first request times out, wait for the service to finish starting and
+retry. An always-on instance requires a plan that supports it.
+
 ## What changed from the original code
 
 | Issue | Fix |

@@ -1,11 +1,12 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 import tempfile
 import os
-from typing import Dict, Any
 
 from ai_model.pipeline import run_pipeline
 from ai_model.questions import evaluate_answer
+from ai_model.config import GEMINI_API_KEY
 
 app = FastAPI()
 
@@ -56,7 +57,8 @@ async def generate_interview(
             temp_path = temp.name
 
         # Run the parsing, matching, and question generation pipeline
-        result = run_pipeline(
+        result = await run_in_threadpool(
+            run_pipeline,
             cv_path=temp_path,
             jd_text=jd,
             difficulty=difficulty,
@@ -90,7 +92,8 @@ async def evaluate_candidate_answer(data: dict):
             raise HTTPException(status_code=422, detail="question and answer are required")
 
         # Run AI-powered answer evaluation
-        result = evaluate_answer(
+        result = await run_in_threadpool(
+            evaluate_answer,
             question=question,
             answer=answer,
             jd=jd,
@@ -112,3 +115,13 @@ async def evaluate_candidate_answer(data: dict):
 @app.get("/")
 async def health_check():
     return {"status": "healthy", "service": "AI Interview Parser Microservice"}
+
+
+@app.get("/health")
+@app.get("/healthz")
+async def detailed_health_check():
+    return {
+        "status": "healthy",
+        "service": "AI Interview Parser Microservice",
+        "gemini_configured": bool(GEMINI_API_KEY),
+    }
