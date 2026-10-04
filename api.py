@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import tempfile
 import os
@@ -37,14 +37,22 @@ async def generate_interview(
     jd: str = Form(...),
     difficulty: str = Form("medium"),
 ):
+    temp_path = None
     try:
+        if difficulty not in {"easy", "medium", "hard"}:
+            raise HTTPException(status_code=422, detail="difficulty must be easy, medium, or hard")
+        if not cv.filename or not cv.filename.lower().endswith((".pdf", ".docx")):
+            raise HTTPException(status_code=415, detail="Only PDF and DOCX resume files are supported")
         # Save uploaded CV to a temporary file
         suffix = ".pdf"
         if cv.filename and cv.filename.endswith(".docx"):
             suffix = ".docx"
             
+        content = await cv.read()
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Resume file must be 10MB or smaller")
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
-            temp.write(await cv.read())
+            temp.write(content)
             temp_path = temp.name
 
         # Run the parsing, matching, and question generation pipeline
@@ -55,17 +63,16 @@ async def generate_interview(
             use_ai_questions=True,
         )
 
-        # Clean up the temporary file
-        try:
-            os.unlink(temp_path)
-        except Exception as pe:
-            print(f"⚠️ Failed to delete temp file {temp_path}: {pe}")
-
         return result  # Returns: { name, skills, match_score, questions }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print("🔥 /interview error:", str(e))
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail="Interview analysis failed") from e
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 # -----------------------------
@@ -80,7 +87,7 @@ async def evaluate_candidate_answer(data: dict):
         difficulty = data.get("difficulty", "medium")
 
         if not question or not answer:
-            return {"error": "question and answer are required"}
+            raise HTTPException(status_code=422, detail="question and answer are required")
 
         # Run AI-powered answer evaluation
         result = evaluate_answer(
@@ -92,9 +99,11 @@ async def evaluate_candidate_answer(data: dict):
 
         return result  # Returns: { feedback, score }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print("🔥 /evaluate error:", str(e))
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail="Answer evaluation failed") from e
 
 
 # -----------------------------
