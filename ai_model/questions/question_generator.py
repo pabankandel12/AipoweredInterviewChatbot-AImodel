@@ -25,7 +25,14 @@ def generate_questions(skills: list[str], level: str = "medium", retrieved_quest
         try:
             generated = _ai_questions(skills, level, retrieved_questions)
             if generated:
-                return generated[: len(retrieved_questions)]
+                # A model can occasionally return fewer lines than requested.
+                # Keep the session length stable by filling the remaining slots
+                # from the retrieved, grounded question bank.
+                questions = []
+                for question in [*generated, *(item["question"] for item in retrieved_questions)]:
+                    if question not in questions:
+                        questions.append(question)
+                return questions[: len(retrieved_questions)]
         except Exception as exc:  # noqa: BLE001
             print(f"[question_generator] AI generation failed ({exc}); using retrieved questions.")
 
